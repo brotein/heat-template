@@ -90,6 +90,42 @@ resources:
         get_param: ssh_key_name
       metadata:
         get_param: metadata
+      user_data_format: RAW
+      user_data:
+        str_replace:
+          template: |
+            #!/bin/sh
+            yum -y upgrade
+            yum -y install httpd wordpress
+            HTTPDCONF=/etc/httpd/conf.d/wordpress.conf
+            sed -i '/Require local/ s/local/all granted/' $HTTPDCONF
+            WPCONF=/etc/wordpress/wp-config.php
+            sed -i '/DB_HOST/ s/localhost/$DB_HOST/' $WPCONF
+            sed -i '/DB_NAME/ s/database_name_here/$DB_NAME/' $WPCONF
+            sed -i '/DB_USER/ s/username_here/$DB_USER/' $WPCONF
+            sed -i '/DB_PASSWORD/ s/password_here/$DB_PASSWORD/' $WPCONF
+            sed -i 's/put your unique phrase here/$WP_AUTH_KEY/' $WPCONF
+            setsebool -P httpd_can_network_connect_db=true
+            systemctl enable httpd
+            systemctl start httpd
+            #
+            # Signal heat that we are finished settings things up.
+            cfn-signal -e0 --data 'OK' -r 'Setup complete' '$WAIT_HANDLE'
+          params:
+            "$WAIT_HANDLE":
+              get_resource: wordpress_wait_handle
+            "$DB_HOST":
+              get_param: db_host
+            "$DB_NAME":
+              get_param: db_name
+            "$DB_USER":
+              get_param: db_user
+            "$DB_PASSWORD":
+              get_param: db_password
+            "$WP_AUTH_KEY":
+              get_attr:
+                - wp_auth_key
+                - value
       networks:
         - port:
             get_resource: wordpress_server_eth0
